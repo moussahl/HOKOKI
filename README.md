@@ -31,6 +31,39 @@
 $ npm install
 ```
 
+Create a `.env` file from `.env.example` and set your PostgreSQL connection values:
+
+```bash
+PORT=3000
+NODE_ENV=development
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+DB_NAME=hokoki
+DB_SYNCHRONIZE=true
+```
+
+## Database migrations
+
+Use migrations to manage schema changes in a safe way (recommended for shared and production environments).
+
+```bash
+# create an empty migration file
+$ npm run migration:create
+
+# generate migration from current entities
+$ npm run migration:generate
+
+# run pending migrations
+$ npm run migration:run
+
+# rollback last migration
+$ npm run migration:revert
+```
+
+For production-like usage, set `DB_SYNCHRONIZE=false` and rely on migrations.
+
 ## Compile and run the project
 
 ```bash
