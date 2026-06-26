@@ -67,6 +67,53 @@ export class LawsService {
     return law;
   }
 
+  async searchArticles(
+    query: string,
+    page: number,
+    limit: number,
+  ): Promise<{ data: LawArticle[]; meta: { page: number; limit: number; total: number; totalPages: number } }> {
+    const qb = this.lawArticleRepository
+      .createQueryBuilder('article')
+      .leftJoinAndSelect('article.law', 'law')
+      .where('article.originalText ILIKE :q', { q: `%${query}%` })
+      .orWhere('article.title ILIKE :q', { q: `%${query}%` })
+      .orWhere('article.simpleText ILIKE :q', { q: `%${query}%` })
+      .orderBy('article.articleNumber', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [data, total] = await qb.getManyAndCount();
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    };
+  }
+
+  async getArticleById(id: string): Promise<LawArticle> {
+    const article = await this.lawArticleRepository.findOne({
+      where: { id },
+      relations: ['law'],
+    });
+    if (!article) throw new NotFoundException(`Article with id ${id} was not found`);
+    return article;
+  }
+
+  async createLaw(dto: Partial<Law>): Promise<Law> {
+    const law = this.lawRepository.create(dto);
+    return this.lawRepository.save(law);
+  }
+
+  async updateLaw(id: string, dto: Partial<Law>): Promise<Law> {
+    const law = await this.getById(id);
+    Object.assign(law, dto);
+    return this.lawRepository.save(law);
+  }
+
+  async deleteLaw(id: string): Promise<void> {
+    const result = await this.lawRepository.delete(id);
+    if (result.affected === 0) throw new NotFoundException(`Law with id ${id} was not found`);
+  }
+
   async getArticlesByLawId(lawId: string): Promise<LawArticle[]> {
     const law = await this.lawRepository.findOne({ where: { id: lawId } });
 
@@ -76,6 +123,7 @@ export class LawsService {
 
     return this.lawArticleRepository.find({
       where: { law: { id: lawId } },
+      relations: ['law'],
       order: { articleNumber: 'ASC' },
     });
   }

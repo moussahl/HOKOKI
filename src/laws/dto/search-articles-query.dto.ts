@@ -1,18 +1,9 @@
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class ListLawsQueryDto {
-  @IsOptional()
+export class SearchArticlesQueryDto {
   @IsString()
-  category?: string;
-
-  @IsOptional()
-  @IsString()
-  language?: string;
-
-  @IsOptional()
-  @IsString()
-  search?: string;
+  q!: string;
 
   @IsOptional()
   @Type(() => Number)

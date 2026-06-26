@@ -4,6 +4,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { LawsModule } from './laws/laws.module';
+import { AuthModule } from './auth/auth.module';
+import { ConversationsModule } from './conversations/conversations.module';
+import { ProceduresModule } from './procedures/procedures.module';
+import { ExpertSessionsModule } from './expert-sessions/expert-sessions.module';
+import { InterestsModule } from './interests/interests.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -27,6 +34,13 @@ import { AppService } from './app.service';
           configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
       }),
     }),
+    LawsModule,
+    AuthModule,
+    ConversationsModule,
+    ProceduresModule,
+    ExpertSessionsModule,
+    InterestsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
