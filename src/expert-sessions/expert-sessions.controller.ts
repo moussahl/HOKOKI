@@ -1,6 +1,7 @@
 import { Body, Controller, Get, NotFoundException, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { User, UserRole } from '../database/entities/user.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -11,7 +12,10 @@ import { CreateExpertSessionDto } from './dto/create-expert-session.dto';
 import { ExpertSessionResponseDto, toExpertSessionResponseDto } from './dto/expert-session-response.dto';
 import { UpdateExpertSessionDto } from './dto/update-expert-session.dto';
 
+@ApiTags('expert-sessions')
+@ApiBearerAuth()
 @Controller('expert-sessions')
+@UseGuards(JwtAuthGuard)
 export class ExpertSessionsController {
   constructor(
     private readonly expertSessionsService: ExpertSessionsService,
@@ -20,7 +24,7 @@ export class ExpertSessionsController {
   ) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Request an expert session' })
   async create(
     @CurrentUser() user: User,
     @Body() dto: CreateExpertSessionDto,
@@ -30,21 +34,21 @@ export class ExpertSessionsController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'List expert sessions for the current user' })
   async list(@CurrentUser() user: User): Promise<ExpertSessionResponseDto[]> {
     const sessions = await this.expertSessionsService.findByUser(user);
     return sessions.map(toExpertSessionResponseDto);
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get an expert session by ID' })
   async getById(@Param('id') id: string): Promise<ExpertSessionResponseDto> {
     const session = await this.expertSessionsService.findById(id);
     return toExpertSessionResponseDto(session);
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Update an expert session' })
   async update(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -55,7 +59,8 @@ export class ExpertSessionsController {
   }
 
   @Post(':id/assign')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiOperation({ summary: 'Assign an expert to a session (admin only)' })
+  @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   async assign(
     @Param('id') id: string,
@@ -70,7 +75,7 @@ export class ExpertSessionsController {
   }
 
   @Get('experts/available')
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'List available verified experts' })
   async availableExperts(): Promise<{ id: string; fullName: string }[]> {
     const experts = await this.expertSessionsService.getAvailableExperts();
     return experts.map((e) => ({ id: e.id, fullName: e.fullName }));

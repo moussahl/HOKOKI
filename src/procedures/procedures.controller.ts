@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '../database/entities/user.entity';
 import { User } from '../database/entities/user.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -15,23 +16,28 @@ import { UpdateProcedureDto } from './dto/update-procedure.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
 import { UpdateStepDto } from './dto/update-step.dto';
 
+@ApiTags('procedures')
 @Controller('procedures')
 export class ProceduresController {
   constructor(private readonly proceduresService: ProceduresService) {}
 
   @Get()
+  @ApiOperation({ summary: 'List all available procedures' })
   async list(): Promise<ProcedureResponseDto[]> {
     const procedures = await this.proceduresService.list();
     return procedures.map(toProcedureResponseDto);
   }
 
   @Get(':key')
+  @ApiOperation({ summary: 'Get a procedure by key' })
   async getByKey(@Param('key') key: string): Promise<ProcedureResponseDto> {
     const procedure = await this.proceduresService.findByKey(key);
     return toProcedureResponseDto(procedure);
   }
 
   @Post()
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a procedure (admin only)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async create(@Body() dto: CreateProcedureDto): Promise<ProcedureResponseDto> {
@@ -40,6 +46,8 @@ export class ProceduresController {
   }
 
   @Patch(':id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a procedure (admin only)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async update(
@@ -51,6 +59,8 @@ export class ProceduresController {
   }
 
   @Delete(':id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a procedure (admin only)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async delete(@Param('id') id: string): Promise<void> {
@@ -58,6 +68,8 @@ export class ProceduresController {
   }
 
   @Post(':id/steps')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add a step to a procedure (admin only)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async addStep(
@@ -69,6 +81,8 @@ export class ProceduresController {
   }
 
   @Patch('steps/:stepId')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a procedure step (admin only)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async updateStep(
@@ -80,6 +94,8 @@ export class ProceduresController {
   }
 
   @Delete('steps/:stepId')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a procedure step (admin only)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async deleteStep(@Param('stepId') stepId: string): Promise<void> {
@@ -87,6 +103,8 @@ export class ProceduresController {
   }
 
   @Post(':id/start')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Start tracking progress on a procedure' })
   @UseGuards(JwtAuthGuard)
   async start(
     @CurrentUser() user: User,
@@ -97,6 +115,8 @@ export class ProceduresController {
   }
 
   @Get('progress/all')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all procedure progress for current user' })
   @UseGuards(JwtAuthGuard)
   async myProgress(@CurrentUser() user: User): Promise<ProgressResponseDto[]> {
     const progress = await this.proceduresService.getUserProgress(user.id);
@@ -104,6 +124,8 @@ export class ProceduresController {
   }
 
   @Patch('progress/:progressId')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update procedure progress (check off a step)' })
   @UseGuards(JwtAuthGuard)
   async updateProgress(
     @CurrentUser() user: User,

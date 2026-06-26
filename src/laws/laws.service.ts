@@ -18,12 +18,8 @@ export class LawsService {
     data: Law[];
     meta: { page: number; limit: number; total: number; totalPages: number };
   }> {
-    const page = Number.isFinite(Number(query.page))
-      ? Math.max(1, Number(query.page))
-      : 1;
-    const limit = Number.isFinite(Number(query.limit))
-      ? Math.min(100, Math.max(1, Number(query.limit)))
-      : 20;
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
 
     const qb = this.lawRepository.createQueryBuilder('law');
 

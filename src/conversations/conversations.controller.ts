@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { User } from '../database/entities/user.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { ConversationsService } from './conversations.service';
 import { ConversationResponseDto, toConversationResponseDto } from './dto/conversation-response.dto';
 import { CreateConversationDto } from './dto/create-conversation.dto';
@@ -9,12 +11,15 @@ import { CreateMessageDto } from './dto/create-message.dto';
 import { MessageResponseDto, toMessageResponseDto } from './dto/message-response.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 
+@ApiTags('conversations')
+@ApiBearerAuth()
 @Controller('conversations')
+@UseGuards(JwtAuthGuard)
 export class ConversationsController {
   constructor(private readonly conversationsService: ConversationsService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Create a new conversation' })
   async create(
     @CurrentUser() user: User,
     @Body() dto: CreateConversationDto,
@@ -24,18 +29,15 @@ export class ConversationsController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'List conversations for the current user' })
   async list(
     @CurrentUser() user: User,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query() pagination: PaginationQueryDto,
   ): Promise<{
     data: ConversationResponseDto[];
     meta: { page: number; limit: number; total: number; totalPages: number };
   }> {
-    const p = Math.max(1, Number(page) || 1);
-    const l = Math.min(100, Math.max(1, Number(limit) || 20));
-    const result = await this.conversationsService.findByUser(user.id, p, l);
+    const result = await this.conversationsService.findByUser(user.id, pagination.page ?? 1, pagination.limit ?? 20);
     return {
       data: result.data.map((c) => toConversationResponseDto(c)),
       meta: result.meta,
@@ -43,7 +45,7 @@ export class ConversationsController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get conversation by ID' })
   async getById(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<ConversationResponseDto> {
@@ -52,7 +54,7 @@ export class ConversationsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Update a conversation' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateConversationDto,
@@ -62,13 +64,13 @@ export class ConversationsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Delete a conversation' })
   async delete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.conversationsService.delete(id);
   }
 
   @Post(':id/messages')
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Add a message to a conversation' })
   async addMessage(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateMessageDto,
@@ -78,18 +80,15 @@ export class ConversationsController {
   }
 
   @Get(':id/messages')
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get messages in a conversation' })
   async getMessages(
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query() pagination: PaginationQueryDto,
   ): Promise<{
     data: MessageResponseDto[];
     meta: { page: number; limit: number; total: number; totalPages: number };
   }> {
-    const p = Math.max(1, Number(page) || 1);
-    const l = Math.min(100, Math.max(1, Number(limit) || 50));
-    const result = await this.conversationsService.getMessages(id, p, l);
+    const result = await this.conversationsService.getMessages(id, pagination.page ?? 1, pagination.limit ?? 50);
     return {
       data: result.data.map(toMessageResponseDto),
       meta: result.meta,
