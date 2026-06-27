@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExpertSession, ExpertSessionStatus } from '../database/entities/expert-session.entity';
@@ -15,13 +20,39 @@ export class ExpertSessionsService {
     private readonly userRepository: Repository<User>,
   ) {}
 
+  async listExperts(specialty?: string): Promise<User[]> {
+    const qb = this.userRepository
+      .createQueryBuilder('user')
+      .where('user.role = :role', { role: UserRole.EXPERT })
+      .andWhere('user.isVerifiedExpert = true')
+      .orderBy('user.averageRating', 'DESC');
+
+    if (specialty) {
+      qb.andWhere('LOWER(user.specialty) LIKE LOWER(:specialty)', {
+        specialty: `%${specialty}%`,
+      });
+    }
+
+    return qb.getMany();
+  }
+
   async create(citizen: User, dto: CreateExpertSessionDto): Promise<ExpertSession> {
+    const expert = await this.userRepository.findOne({
+      where: { id: dto.expertId, role: UserRole.EXPERT, isVerifiedExpert: true },
+    });
+
+    if (!expert) {
+      throw new NotFoundException('Expert not found or is not a verified expert');
+    }
+
     const session = this.sessionRepository.create({
       citizen,
+      expert,
       topic: dto.topic ?? null,
       notes: dto.notes ?? null,
       status: ExpertSessionStatus.REQUESTED,
     });
+
     return this.sessionRepository.save(session);
   }
 
@@ -45,16 +76,13 @@ export class ExpertSessionsService {
       where: { id },
       relations: ['citizen', 'expert'],
     });
-    if (!session) throw new NotFoundException(`Session with id ${id} was not found`);
+    if (!session) throw new NotFoundException(`Session ${id} not found`);
     return session;
   }
 
-  async update(
-    id: string,
-    user: User,
-    dto: UpdateExpertSessionDto,
-  ): Promise<ExpertSession> {
+  async update(id: string, user: User, dto: UpdateExpertSessionDto): Promise<ExpertSession> {
     const session = await this.findById(id);
+
     const isCitizen = session.citizen.id === user.id;
     const isExpert = session.expert?.id === user.id;
     const isAdmin = user.role === UserRole.ADMIN;
@@ -68,24 +96,51 @@ export class ExpertSessionsService {
     }
 
     if (dto.status === ExpertSessionStatus.CONFIRMED && !isExpert && !isAdmin) {
-      throw new ForbiddenException('Only the expert or admin can confirm');
+      throw new ForbiddenException('Only the assigned expert can confirm');
+    }
+
+    if (dto.status === ExpertSessionStatus.REJECTED && !isExpert && !isAdmin) {
+      throw new ForbiddenException('Only the assigned expert can reject');
+    }
+
+    if (dto.status === ExpertSessionStatus.COMPLETED && !isExpert && !isAdmin) {
+      throw new ForbiddenException('Only the assigned expert can mark as completed');
     }
 
     if (dto.notes !== undefined) session.notes = dto.notes;
     if (dto.status !== undefined) session.status = dto.status;
+
     return this.sessionRepository.save(session);
   }
 
-  async assignExpert(sessionId: string, expert: User): Promise<ExpertSession> {
-    const session = await this.findById(sessionId);
-    session.expert = expert;
-    session.status = ExpertSessionStatus.CONFIRMED;
-    return this.sessionRepository.save(session);
-  }
+  async rateSession(id: string, citizen: User, rating: number): Promise<ExpertSession> {
+    const session = await this.findById(id);
 
-  async getAvailableExperts(): Promise<User[]> {
-    return this.userRepository.find({
-      where: { role: UserRole.EXPERT, isVerifiedExpert: true },
-    });
+    if (session.citizen.id !== citizen.id) {
+      throw new ForbiddenException('Only the citizen of this session can rate it');
+    }
+
+    if (session.status !== ExpertSessionStatus.COMPLETED) {
+      throw new BadRequestException('You can only rate a completed session');
+    }
+
+    if (session.citizenRating !== null) {
+      throw new BadRequestException('You have already rated this session');
+    }
+
+    if (!session.expert) {
+      throw new BadRequestException('No expert assigned to this session');
+    }
+
+    session.citizenRating = rating;
+    await this.sessionRepository.save(session);
+
+    const expert = session.expert;
+    const newCount = expert.ratingCount + 1;
+    expert.averageRating = (expert.averageRating * expert.ratingCount + rating) / newCount;
+    expert.ratingCount = newCount;
+    await this.userRepository.save(expert);
+
+    return session;
   }
 }

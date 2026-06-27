@@ -14,6 +14,7 @@ export enum ExpertSessionStatus {
   CONFIRMED = 'confirmed',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
+  REJECTED = 'rejected',
 }
 
 @Entity({ name: 'expert_sessions' })
@@ -50,6 +51,9 @@ export class ExpertSession {
     default: ExpertSessionStatus.REQUESTED,
   })
   status!: ExpertSessionStatus;
+
+  @Column({ name: 'citizen_rating', type: 'smallint', nullable: true, default: null })
+  citizenRating!: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

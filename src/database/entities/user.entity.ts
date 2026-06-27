@@ -45,6 +45,15 @@ export class User {
   @Column({ name: 'is_verified_expert', default: false })
   isVerifiedExpert!: boolean;
 
+  @Column({ type: 'varchar', nullable: true, default: null })
+  specialty!: string | null;
+
+  @Column({ name: 'average_rating', type: 'float', default: 0 })
+  averageRating!: number;
+
+  @Column({ name: 'rating_count', type: 'int', default: 0 })
+  ratingCount!: number;
+
   @OneToMany(() => Conversation, (conversation) => conversation.user)
   conversations!: Conversation[];
 
