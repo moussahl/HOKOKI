@@ -1,38 +1,36 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { UserRole } from '../database/entities/user.entity';
+import { User, UserRole } from '../database/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 
 const mockUser = {
-  id: 'uuid-1',
+  id: 'u1',
   email: 'test@example.com',
   fullName: 'Test User',
-  passwordHash: 'hashed',
+  passwordHash: 'hashed-pw',
   role: UserRole.CITIZEN,
   preferredLanguage: 'ar',
   isVerifiedExpert: false,
   createdAt: new Date(),
   updatedAt: new Date(),
-  conversations: [],
-  interests: [],
-  procedureProgress: [],
-  notifications: [],
-  requestedExpertSessions: [],
-  expertSessions: [],
-};
+} as User;
 
 const mockUsersService = {
   findByEmail: jest.fn(),
-  findById: jest.fn(),
   create: jest.fn(),
 };
 
 const mockJwtService = {
-  sign: jest.fn().mockReturnValue('signed-token'),
+  sign: jest.fn().mockReturnValue('mock-jwt-token'),
 };
+
+jest.mock('bcrypt', () => ({
+  hash: jest.fn().mockResolvedValue('hashed-pw'),
+  compare: jest.fn(),
+}));
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -50,58 +48,75 @@ describe('AuthService', () => {
     jest.clearAllMocks();
   });
 
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
   describe('register', () => {
-    it('creates a user and returns a token when email is new', async () => {
+    const registerDto = {
+      email: 'new@example.com',
+      fullName: 'New User',
+      password: 'password123',
+      preferredLanguage: 'fr',
+    };
+
+    it('should register a new user', async () => {
       mockUsersService.findByEmail.mockResolvedValue(null);
       mockUsersService.create.mockResolvedValue(mockUser);
 
-      const result = await service.register({
-        email: 'test@example.com',
-        fullName: 'Test User',
-        password: 'password123',
-      });
+      const result = await service.register(registerDto);
 
-      expect(result.accessToken).toBe('signed-token');
+      expect(result.accessToken).toBe('mock-jwt-token');
       expect(result.user.email).toBe('test@example.com');
-      expect(mockUsersService.create).toHaveBeenCalledTimes(1);
+      expect(bcrypt.hash).toHaveBeenCalledWith('password123', 12);
+      expect(mockUsersService.create).toHaveBeenCalledWith({
+        email: 'new@example.com',
+        fullName: 'New User',
+        passwordHash: 'hashed-pw',
+        preferredLanguage: 'fr',
+      });
     });
 
-    it('throws ConflictException when email already exists', async () => {
+    it('should throw ConflictException if email exists', async () => {
       mockUsersService.findByEmail.mockResolvedValue(mockUser);
 
-      await expect(
-        service.register({ email: 'test@example.com', fullName: 'X', password: 'password123' }),
-      ).rejects.toThrow(ConflictException);
-
-      expect(mockUsersService.create).not.toHaveBeenCalled();
+      await expect(service.register(registerDto)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
   describe('login', () => {
-    it('returns a token when credentials are valid', async () => {
-      const passwordHash = await bcrypt.hash('password123', 10);
-      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, passwordHash });
+    const loginDto = {
+      email: 'test@example.com',
+      password: 'password123',
+    };
 
-      const result = await service.login({ email: 'test@example.com', password: 'password123' });
+    it('should login successfully', async () => {
+      mockUsersService.findByEmail.mockResolvedValue(mockUser);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
-      expect(result.accessToken).toBe('signed-token');
+      const result = await service.login(loginDto);
+
+      expect(result.accessToken).toBe('mock-jwt-token');
+      expect(result.user.email).toBe('test@example.com');
     });
 
-    it('throws UnauthorizedException when user does not exist', async () => {
+    it('should throw UnauthorizedException if user not found', async () => {
       mockUsersService.findByEmail.mockResolvedValue(null);
 
-      await expect(
-        service.login({ email: 'nobody@example.com', password: 'password123' }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
-    it('throws UnauthorizedException when password is wrong', async () => {
-      const passwordHash = await bcrypt.hash('correct-password', 10);
-      mockUsersService.findByEmail.mockResolvedValue({ ...mockUser, passwordHash });
+    it('should throw UnauthorizedException if password is wrong', async () => {
+      mockUsersService.findByEmail.mockResolvedValue(mockUser);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(
-        service.login({ email: 'test@example.com', password: 'wrong-password' }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 });

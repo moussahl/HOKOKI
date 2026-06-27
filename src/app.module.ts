@@ -27,19 +27,37 @@ import { UploadsModule } from './uploads/uploads.module';
     ]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
+
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres' as const,
-        host: configService.get<string>('DB_HOST', 'localhost'),
-        port: Number(configService.get<string>('DB_PORT', '5432')),
-        username: configService.get<string>('DB_USERNAME', 'postgres'),
-        password: configService.get<string>('DB_PASSWORD', 'admin'),
-        database: configService.get<string>('DB_NAME', 'hokoki'),
-        entities: [join(__dirname, '**', '*.entity.{ts,js}')],
-        autoLoadEntities: true,
-        synchronize:
-          configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
-      }),
+
+      useFactory: (config: ConfigService) => {
+        console.log('HOST =', config.get('DB_HOST'));
+        console.log('USER =', config.get('DB_USERNAME'));
+
+        return {
+          type: 'postgres',
+
+          host: config.get('DB_HOST'),
+
+          port: Number(config.get('DB_PORT', '5432')),
+
+          username: config.get('DB_USERNAME'),
+
+          password: config.get('DB_PASSWORD'),
+
+          database: config.get('DB_NAME'),
+
+          entities: [join(__dirname, '**', '*.entity.{ts,js}')],
+
+          autoLoadEntities: true,
+
+          synchronize: false,
+
+          ssl: {
+            rejectUnauthorized: false,
+          },
+        };
+      },
     }),
     LawsModule,
     AuthModule,
@@ -51,9 +69,6 @@ import { UploadsModule } from './uploads/uploads.module';
     UploadsModule,
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

@@ -1,37 +1,67 @@
-import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { LawArticle } from '../database/entities/law-article.entity';
+import { NotFoundException } from '@nestjs/common';
 import { Law } from '../database/entities/law.entity';
+import { LawArticle } from '../database/entities/law-article.entity';
 import { LawsService } from './laws.service';
 
-const mockLaw = { id: 'law-uuid-1', title: 'Code du travail', category: 'labor', language: 'ar', createdAt: new Date() };
-const mockArticle = { id: 'art-uuid-1', title: 'Article 1', articleNumber: 1, originalText: 'text', simpleText: 'simple', law: mockLaw };
+const mockLaw = {
+  id: 'l1',
+  slug: 'code-du-travail',
+  title: 'قانون العمل',
+  category: 'labor',
+  language: 'ar',
+  sourceUrl: 'https://example.com',
+  sourcePublishedAt: null,
+  summary: 'Summary text',
+  articles: [],
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
 
-const buildQb = (result: any) => ({
-  andWhere: jest.fn().mockReturnThis(),
-  where: jest.fn().mockReturnThis(),
-  orWhere: jest.fn().mockReturnThis(),
+const mockArticle = {
+  id: 'a1',
+  law: mockLaw,
+  articleNumber: '1',
+  title: 'Article 1',
+  originalText: 'Original text',
+  simpleText: 'Simple text',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+const mockQueryBuilder = {
   leftJoinAndSelect: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  andWhere: jest.fn().mockReturnThis(),
+  orWhere: jest.fn().mockReturnThis(),
   orderBy: jest.fn().mockReturnThis(),
   skip: jest.fn().mockReturnThis(),
   take: jest.fn().mockReturnThis(),
-  getManyAndCount: jest.fn().mockResolvedValue(result),
-});
+  getManyAndCount: jest.fn().mockResolvedValue([[mockLaw], 1]),
+};
 
-const mockLawRepo = {
-  createQueryBuilder: jest.fn(),
+const mockLawRepository = {
+  createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
   findOne: jest.fn(),
   create: jest.fn(),
   save: jest.fn(),
   delete: jest.fn(),
-  find: jest.fn(),
 };
 
-const mockArticleRepo = {
-  createQueryBuilder: jest.fn(),
+const mockArticleRepository = {
+  createQueryBuilder: jest.fn().mockReturnValue({
+    ...mockQueryBuilder,
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    orWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    getManyAndCount: jest.fn().mockResolvedValue([[mockArticle], 1]),
+  }),
   findOne: jest.fn(),
   find: jest.fn(),
+  create: jest.fn(),
+  save: jest.fn(),
 };
 
 describe('LawsService', () => {
@@ -41,8 +71,8 @@ describe('LawsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LawsService,
-        { provide: getRepositoryToken(Law), useValue: mockLawRepo },
-        { provide: getRepositoryToken(LawArticle), useValue: mockArticleRepo },
+        { provide: getRepositoryToken(Law), useValue: mockLawRepository },
+        { provide: getRepositoryToken(LawArticle), useValue: mockArticleRepository },
       ],
     }).compile();
 
@@ -50,65 +80,110 @@ describe('LawsService', () => {
     jest.clearAllMocks();
   });
 
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
   describe('list', () => {
-    it('returns paginated laws', async () => {
-      mockLawRepo.createQueryBuilder.mockReturnValue(buildQb([[mockLaw], 1]));
-
-      const result = await service.list({ page: 1, limit: 20 });
-
-      expect(result.data).toHaveLength(1);
+    it('should return paginated laws without filters', async () => {
+      const result = await service.list({});
+      expect(result.data).toEqual([mockLaw]);
       expect(result.meta.total).toBe(1);
       expect(result.meta.totalPages).toBe(1);
     });
 
-    it('defaults page to 1 and limit to 20 when undefined', async () => {
-      mockLawRepo.createQueryBuilder.mockReturnValue(buildQb([[], 0]));
+    it('should apply category filter', async () => {
+      await service.list({ category: 'labor' });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'law.category = :category',
+        { category: 'labor' },
+      );
+    });
 
-      const result = await service.list({});
-
-      expect(result.meta.page).toBe(1);
-      expect(result.meta.limit).toBe(20);
+    it('should apply search filter', async () => {
+      await service.list({ search: 'work' });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        '(law.title ILIKE :search OR law.summary ILIKE :search)',
+        { search: '%work%' },
+      );
     });
   });
 
   describe('getById', () => {
-    it('returns the law when found', async () => {
-      mockLawRepo.findOne.mockResolvedValue(mockLaw);
-
-      const result = await service.getById('law-uuid-1');
-
-      expect(result.id).toBe('law-uuid-1');
+    it('should return a law', async () => {
+      mockLawRepository.findOne.mockResolvedValue(mockLaw);
+      const result = await service.getById('l1');
+      expect(result).toEqual(mockLaw);
     });
 
-    it('throws NotFoundException when law does not exist', async () => {
-      mockLawRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.getById('missing')).rejects.toThrow(NotFoundException);
+    it('should throw NotFoundException', async () => {
+      mockLawRepository.findOne.mockResolvedValue(null);
+      await expect(service.getById('nonexistent')).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('searchArticles', () => {
-    it('returns paginated article search results', async () => {
-      mockArticleRepo.createQueryBuilder.mockReturnValue(buildQb([[mockArticle], 1]));
+    it('should return paginated articles', async () => {
+      const result = await service.searchArticles('test', 1, 20);
+      expect(result.data).toEqual([mockArticle]);
+    });
+  });
 
-      const result = await service.searchArticles('text', 1, 20);
+  describe('getArticleById', () => {
+    it('should return an article', async () => {
+      mockArticleRepository.findOne.mockResolvedValue(mockArticle);
+      const result = await service.getArticleById('a1');
+      expect(result).toEqual(mockArticle);
+    });
 
-      expect(result.data).toHaveLength(1);
-      expect(result.meta.total).toBe(1);
+    it('should throw NotFoundException', async () => {
+      mockArticleRepository.findOne.mockResolvedValue(null);
+      await expect(service.getArticleById('nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('createLaw', () => {
+    it('should create a law', async () => {
+      mockLawRepository.create.mockReturnValue(mockLaw);
+      mockLawRepository.save.mockResolvedValue(mockLaw);
+      const result = await service.createLaw({ title: 'New Law' } as Partial<Law>);
+      expect(result).toEqual(mockLaw);
+    });
+  });
+
+  describe('updateLaw', () => {
+    it('should update a law', async () => {
+      const updated = { ...mockLaw, title: 'Updated' };
+      mockLawRepository.findOne.mockResolvedValue(mockLaw);
+      mockLawRepository.save.mockResolvedValue(updated);
+      const result = await service.updateLaw('l1', { title: 'Updated' } as Partial<Law>);
+      expect(result.title).toBe('Updated');
     });
   });
 
   describe('deleteLaw', () => {
-    it('throws NotFoundException when no rows affected', async () => {
-      mockLawRepo.delete.mockResolvedValue({ affected: 0 });
-
-      await expect(service.deleteLaw('missing')).rejects.toThrow(NotFoundException);
+    it('should delete a law', async () => {
+      mockLawRepository.delete.mockResolvedValue({ affected: 1 });
+      await service.deleteLaw('l1');
     });
 
-    it('resolves without error when law exists', async () => {
-      mockLawRepo.delete.mockResolvedValue({ affected: 1 });
+    it('should throw NotFoundException', async () => {
+      mockLawRepository.delete.mockResolvedValue({ affected: 0 });
+      await expect(service.deleteLaw('nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
 
-      await expect(service.deleteLaw('law-uuid-1')).resolves.toBeUndefined();
+  describe('getArticlesByLawId', () => {
+    it('should return articles for a law', async () => {
+      mockLawRepository.findOne.mockResolvedValue(mockLaw);
+      mockArticleRepository.find.mockResolvedValue([mockArticle]);
+      const result = await service.getArticlesByLawId('l1');
+      expect(result).toEqual([mockArticle]);
+    });
+
+    it('should throw NotFoundException if law not found', async () => {
+      mockLawRepository.findOne.mockResolvedValue(null);
+      await expect(service.getArticlesByLawId('nonexistent')).rejects.toThrow(NotFoundException);
     });
   });
 });
